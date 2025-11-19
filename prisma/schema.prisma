@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String?  // Optional - Cognito users won't have local passwords
+  cognitoSub   String?  @unique // Cognito user ID
+  firstName    String
+  lastName     String
+  role         UserRole @default(USER)
+  storageQuota BigInt   @default(5368709120) // 5GB default
+  storageUsed  BigInt   @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  files   File[]
+  folders Folder[]
+
+  authTokens AuthToken[]
+
+  @@map("users")
+}
+
+model AuthToken {
+  id        String         @id @default(uuid())
+  userId    String
+  type      AuthTokenType
+  token     String         @unique
+  expiresAt DateTime
+  isUsed    Boolean        @default(false)
+  createdAt DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_tokens")
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model File {
+  id             String         @id @default(uuid())
+  name           String
+  originalName   String
+  mimeType       String
+  size           BigInt
+  s3Key          String
+  s3Bucket       String?
+  cloudFrontUrl  String?
+  folderId       String?
+  ownerId        String
+  permission     FilePermission @default(PRIVATE)
+  shareToken     String?
+  sharedWith     String[]
+  description    String?
+  isDeleted      Boolean        @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  owner  User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("files")
+}
+
+model Folder {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isRoot      Boolean  @default(false)
+  parentId    String?
+  ownerId     String
+  isShared    Boolean  @default(false)
+  sharedWith  String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Folder?  @relation("FolderToFolder", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderToFolder")
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  files    File[]
+
+  @@map("folders")
+}
+
+enum AuthTokenType {
+  OTP
+  MAGIC_LINK
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum FilePermission {
+  PRIVATE
+  PUBLIC
+  SHARED
+}
